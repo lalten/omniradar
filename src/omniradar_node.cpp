@@ -52,6 +52,7 @@ int main (int argc, char** argv)
     catch(OmniradarException ex)
     {
         ROS_ERROR_STREAM("Omniradar exception " << ex.what());
+        throw;
     }
     return 0;
 }

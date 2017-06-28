@@ -1,3 +1,5 @@
+#include <string>
+
 #include <ros/ros.h>
 #include <std_msgs/ByteMultiArray.h>
 #include <dynamic_reconfigure/server.h>
@@ -43,9 +45,22 @@ OmniradarNode::OmniradarNode()
 
         while(nh.ok())
         {
+            try
             {
                 std::lock_guard<std::mutex> lock(mtx_rdk);
                 echo = rdk->AcquireEcho(num_sweeps);
+            }
+            catch (OmniradarException ex)
+            {
+                if(std::string(ex.what()).find("RDK_NO_RESPONSE") != std::string::npos)
+                {
+                    ROS_WARN_STREAM("RDK_NO_RESPONSE");
+                    continue;
+                }
+                else
+                {
+                    throw;
+                }
             }
 
             // copy data into message
@@ -88,5 +103,5 @@ void OmniradarNode::dynamic_reconfigure_callback_function (omniradar::omniradarC
 //     rdk->setVCOTune(vco_tune);
     rdk->setSweepTime(config.t_sweep / 1000.0);
     num_sweeps = config.n_sweeps;
-    ROS_INFO_STREAM("set sweep to " << num_sweeps << " x " << config.t_sweep/1000.0 << "ms");
+    ROS_INFO_STREAM("set sweep to " << num_sweeps << " x " << config.t_sweep << "ms");
 }

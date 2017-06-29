@@ -1,4 +1,5 @@
 #include <string>
+// #include <chrono>
 
 #include <ros/ros.h>
 #include <std_msgs/ByteMultiArray.h>
@@ -64,6 +65,7 @@ OmniradarNode::OmniradarNode()
             }
 
             // copy data into message
+//             auto start = std::chrono::system_clock::now();
             msg.layout.dim[1].size = echo[0].size();
             msg.layout.dim[1].stride = msg.layout.dim[1].size;
             msg.layout.dim[0].stride = msg.layout.dim[0].size * msg.layout.dim[1].size;
@@ -73,6 +75,9 @@ OmniradarNode::OmniradarNode()
             {
                 std::copy(echo[channel_nr].begin(), echo[channel_nr].end(), msg.data.begin() + msg.layout.dim[1].stride * channel_nr);
             }
+//             auto end = std::chrono::system_clock::now();
+//             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+//             ROS_INFO_STREAM("copying took " << elapsed.count() << "ms");
             pub.publish(msg);
             
             ros::spinOnce();

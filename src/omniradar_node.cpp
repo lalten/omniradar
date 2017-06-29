@@ -40,7 +40,7 @@ OmniradarNode::OmniradarNode()
             rdk->setVCOTune(vco_tune);
             rdk->setSweepTime(20e-3);
         }
-        std::vector< std::vector<bool> > echo;
+        std::vector< std::vector<uint8_t> > echo;
         
         ROS_INFO_STREAM("RDK ready");
 

@@ -16,6 +16,9 @@
 
 OmniradarNode::OmniradarNode()
 {
+    // Name this thread for debugging
+    pthread_setname_np(pthread_self(), "Main thread");
+    
     msg.n_sweeps = 1;
     msg.t_sweep = 5e-3;
     msg.ric_config = "06-FE-00-69-60-7A-C0-00-00-00-00-2C-00-00-00-00-01-DC-64";
@@ -33,6 +36,9 @@ OmniradarNode::OmniradarNode()
         // Create a publisher and name the topic.
         ros::Publisher pub = nh.advertise<omniradar::RadarEcho>("radar_raw", 10);
 
+        ros::AsyncSpinner spinner(1);
+        spinner.start();
+        
         // Set up Radar
         {
             std::lock_guard<std::mutex> lock(mtx_rdk);
@@ -84,9 +90,6 @@ OmniradarNode::OmniradarNode()
                     throw;
                 }
             }
-
-            ros::spinOnce();
-
         }
     }
     catch(OmniradarException ex)
@@ -104,6 +107,9 @@ OmniradarNode::~OmniradarNode()
 
 void OmniradarNode::dynamic_reconfigure_callback_function (omniradar::omniradarConfig &config, uint32_t level)
 {
+    // Name this thread for debugging
+    pthread_setname_np(pthread_self(), "Dyn Reconf");
+
     if(!rdk)
         return;
     

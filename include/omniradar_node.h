@@ -1,9 +1,10 @@
 #include <mutex>
+#include <thread>
 
 #include <ros/ros.h>
 
 #include <omniradar.h>
-
+#include <omniradar/RadarEcho.h>
 #include <omniradar/omniradarConfig.h>
 
 
@@ -17,6 +18,9 @@ public:
     
 private:
     Omniradar *rdk = nullptr;
-    int num_sweeps = 2;
     std::mutex mtx_rdk;
+    omniradar::RadarEcho msg;
+    std::mutex mtx_msg;
+    
+    void build_and_publish_msg(std::vector< std::vector<uint8_t> > &echo);
 };

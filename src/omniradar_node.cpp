@@ -1,18 +1,25 @@
+#include <omniradar/RadarEcho.h>
 #include <string>
+#include <memory>
+#include <pthread.h> // set thread names
+
 // #include <chrono>
 
 #include <ros/ros.h>
-#include <std_msgs/ByteMultiArray.h>
 #include <dynamic_reconfigure/server.h>
 
 #include <omniradar_node.h>
-
+#include <omniradar/RadarEcho.h>
 
 #include "vco_tune.h"
 
 
 OmniradarNode::OmniradarNode()
 {
+    msg.n_sweeps = 1;
+    msg.t_sweep = 5e-3;
+    msg.ric_config = "06-FE-00-69-60-7A-C0-00-00-00-00-2C-00-00-00-00-01-DC-64";
+
     try
     {
         // Set up ROS.
@@ -24,23 +31,16 @@ OmniradarNode::OmniradarNode()
         ros::NodeHandle nh("~");
 
         // Create a publisher and name the topic.
-        ros::Publisher pub = nh.advertise<std_msgs::ByteMultiArray>("radar_raw", 10);
-
-        std_msgs::ByteMultiArray msg;
-        msg.layout.dim.resize(2);
-        msg.layout.dim[0].label = "channel";
-        msg.layout.dim[0].size = 4;
-        msg.layout.dim[1].label = "sample";
+        ros::Publisher pub = nh.advertise<omniradar::RadarEcho>("radar_raw", 10);
 
         // Set up Radar
         {
             std::lock_guard<std::mutex> lock(mtx_rdk);
             rdk = new Omniradar();
-            rdk->ConfigureRadar("06-FE-00-69-60-7A-C0-00-00-00-00-2C-00-00-00-00-01-DC-64");
+            rdk->ConfigureRadar(msg.ric_config);
             rdk->setVCOTune(vco_tune);
-            rdk->setSweepTime(20e-3);
+            rdk->setSweepTime(msg.t_sweep);
         }
-        std::vector< std::vector<uint8_t> > echo;
         
         ROS_INFO_STREAM("RDK ready");
 
@@ -48,8 +48,29 @@ OmniradarNode::OmniradarNode()
         {
             try
             {
-                std::lock_guard<std::mutex> lock(mtx_rdk);
-                echo = rdk->AcquireEcho(num_sweeps);
+                std::lock_guard<std::mutex> lock_rdk(mtx_rdk);
+                auto t_echo = ros::Time::now();
+                auto p_echo = rdk->AcquireEcho(msg.n_sweeps);
+
+                std::thread t (
+                    [=] ()
+                    {
+                        std::lock_guard<std::mutex> lock_msg(mtx_msg);
+
+                        // Name this thread for debugging
+                        std::string thread_name = "Pub msg #";
+                        thread_name.append(std::to_string(msg.header.seq));
+                        pthread_setname_np(pthread_self(), thread_name.c_str());
+                        
+                        msg.header.stamp = t_echo;
+                        msg.packed_echo.resize(p_echo->size());
+                        std::copy(p_echo->begin(), p_echo->end(), msg.packed_echo.begin());
+                        pub.publish(msg);
+                        msg.header.seq++;
+                    }
+                );
+                t.detach();
+
             }
             catch (OmniradarException ex)
             {
@@ -64,22 +85,6 @@ OmniradarNode::OmniradarNode()
                 }
             }
 
-            // copy data into message
-//             auto start = std::chrono::system_clock::now();
-            msg.layout.dim[1].size = echo[0].size();
-            msg.layout.dim[1].stride = msg.layout.dim[1].size;
-            msg.layout.dim[0].stride = msg.layout.dim[0].size * msg.layout.dim[1].size;
-            
-            msg.data.resize(msg.layout.dim[0].size * msg.layout.dim[1].size);
-            for(uint8_t channel_nr=0; channel_nr<4; channel_nr++)
-            {
-                std::copy(echo[channel_nr].begin(), echo[channel_nr].end(), msg.data.begin() + msg.layout.dim[1].stride * channel_nr);
-            }
-//             auto end = std::chrono::system_clock::now();
-//             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-//             ROS_INFO_STREAM("copying took " << elapsed.count() << "ms");
-            pub.publish(msg);
-            
             ros::spinOnce();
 
         }
@@ -103,10 +108,15 @@ void OmniradarNode::dynamic_reconfigure_callback_function (omniradar::omniradarC
         return;
     
     std::lock_guard<std::mutex> lock(mtx_rdk);
-    
     rdk->ConfigureRadar(config.config_str);
 //     rdk->setVCOTune(vco_tune);
     rdk->setSweepTime(config.t_sweep / 1000.0);
-    num_sweeps = config.n_sweeps;
-    ROS_INFO_STREAM("set sweep to " << num_sweeps << " x " << config.t_sweep << "ms");
+    
+    std::lock_guard<std::mutex> lock_msg(mtx_msg);
+    msg.ric_config = config.config_str;
+    msg.t_sweep = config.t_sweep / 1000.0;
+    msg.n_sweeps = config.n_sweeps;
+    
+    ROS_INFO_STREAM("Set sweep to " << config.n_sweeps << " x " << config.t_sweep << "ms");
+    
 }

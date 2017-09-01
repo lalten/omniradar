@@ -1,0 +1,9 @@
+<launch>
+
+  <!-- Launch the Omniradar RDK -->
+  <node pkg="omniradar" type="omniradar_node" name="omniradar_node" output="screen">
+    <param name="n_sweeps" value="2" />
+    <param name="t_sweep" value="5" />
+  </node>
+
+</launch>
